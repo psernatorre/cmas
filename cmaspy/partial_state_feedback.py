@@ -1,6 +1,7 @@
 # Import standard and third-party python packages
 import numpy as np
 from scipy.linalg import solve_continuous_are, eigvals, inv, block_diag, sqrtm
+from collections import namedtuple
 import cvxpy as cp
 
 # Import packages from cmaspy
@@ -57,8 +58,10 @@ def single_agent_output_feedback(A: np.ndarray, B: np.ndarray, C: np.ndarray, D:
     print('Closed-loop system eigenvalues: ')
 
     Acl_eigvals = compute_eigenvalues(Acl, show=True)
+
+    output = namedtuple('Output', ['F', 'alpha','prob', 'Acl'])
     
-    return F
+    return output(F, alpha, prob, Acl)
 
 def mas_output_feedback(A: np.ndarray, B: list[np.ndarray], C: list[np.ndarray], D: list[np.ndarray], 
                         Q: list[np.ndarray], R: list[np.ndarray], P: list[np.ndarray], 
@@ -118,8 +121,8 @@ def mas_output_feedback(A: np.ndarray, B: list[np.ndarray], C: list[np.ndarray],
             
             sum2 = sum2 + B[k] @ F[k] @ C[k]
 
-        D_bar[j] = np.hstack(D_bar[j])
-        R_bar[j] = block_diag(*R_bar[j])
+        D_bar[j] = np.hstack(D_bar[j]) if D_bar[j] else np.atleast_2d([])
+        R_bar[j] = block_diag(*R_bar[j]) if R_bar[j] else np.atleast_2d([])
         Gamma[j] = Q[j] - P[j] @ ( sum1 + sum2 ) - ( sum1 + sum2 ).T @ P[j]
         Upsilon[j] =  P[j] @ B[j] @ ( F[j] @ D[j] @ inv(R[j]) + inv(R[j]) @ D[j].T @ F[j].T ) @ B[j].T @ P[j]
         B_bar[j] = B[j] @ ( np.eye(B[j].shape[1]) + F[j] @ D[j] )
@@ -128,21 +131,29 @@ def mas_output_feedback(A: np.ndarray, B: list[np.ndarray], C: list[np.ndarray],
     constraints = []
 
     for j in range(nag):
-        M = np.zeros((B[j].shape[1], D_bar[j].shape[1]))
-        constraints += [cp.bmat([   [Gamma[j] + Upsilon[j],     P[j] @ B_bar[j],    D_bar[j]],
-                                    [B_bar[j].T @ P[j],         R[j],               M ],
-                                    [D_bar[j.T],                M.T,               R_bar[j]] ] >> alpha[j]*np.eye(n + m)) ]
-        M = sqrtm(R[j]) @ B[j].T @ P[j] + sqrtm(R[j]) @ F[j] @ C[j]
-        constraints += [cp.bmat([   [beta[j] @ np.eye(B[j].shape[1]),   M],
-                                    [M.T,                               beta[j] @ np.eye(n)]]) >> 0]
+        if alpha_coef > 0:
+            if nag > 1:
+                M = np.zeros((B[j].shape[1], D_bar[j].shape[1]))
+                constraints += [cp.bmat([   [Gamma[j] + Upsilon[j],     P[j] @ B_bar[j],    D_bar[j]],
+                                            [B_bar[j].T @ P[j],         R[j],               M ],
+                                            [D_bar[j].T,                M.T,               R_bar[j]] ]) >> alpha[j]*np.eye(n + m)]
+            else:
+                constraints += [cp.bmat([   [Gamma[j] + Upsilon[j],     P[j] @ B_bar[j]],
+                                            [B_bar[j].T @ P[j],         R[j] ]] ) >> alpha[j]*np.eye(n + m) ]
+
+        if beta_coef > 0:
+            M = sqrtm(R[j]) @ B[j].T @ P[j] + sqrtm(R[j]) @ F[j] @ C[j]
+            constraints += [cp.bmat([   [beta[j] @ np.eye(B[j].shape[1]),   M],
+                                        [M.T,                               beta[j] @ np.eye(n)]]) >> 0]
         
-        M = sqrtm(R[j]) * F[j] * D[j]
-        constraints += [cp.bmat([   [gamma[j] @ np.eye(B[j].shape[1]),  M],
-                                    [M.T,                               gamma[j] @ np.eye(B[j].shape[1])]]) >> 0]
+        if gamma_coef > 0:
+            M = sqrtm(R[j]) @ F[j] @ D[j]
+            constraints += [cp.bmat([   [gamma[j] @ np.eye(B[j].shape[1]),  M],
+                                        [M.T,                               gamma[j] @ np.eye(B[j].shape[1])]]) >> 0]
     
     sum_obj = 0
     for j in range(nag):
-         sum_obj  += -alpha_coef * alpha[j] + beta_coef * beta[j] + gamma_coef * gamma[j]
+         sum_obj = sum_obj -alpha_coef * alpha[j] + beta_coef * beta[j] + gamma_coef * gamma[j]
     
     # Define objective function
     objective = cp.Minimize( sum_obj )
@@ -169,11 +180,13 @@ def mas_output_feedback(A: np.ndarray, B: list[np.ndarray], C: list[np.ndarray],
     Acl_F = A 
     
     for j in range(nag):
-        Acl_F += B[j] @ F[j] @ C[j]
+        Acl_F = Acl_F + B[j] @ F[j] @ C[j]
     
 
     print('Closed-loop system eigenvalues: ')
 
     Acl_eigvals = compute_eigenvalues(Acl_F, show=True)
 
-    return F, alpha, beta, gamma, prob, Acl_F
+    output = namedtuple('Output', ['F', 'alpha', 'beta', 'gamma', 'prob', 'Acl_F'])
+
+    return output(F, alpha, beta, gamma, prob, Acl_F)

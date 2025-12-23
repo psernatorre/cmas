@@ -1,3 +1,7 @@
+"""
+This example tests solving a simple least squares problem using CVXPY with the MOSEK solver.
+It helps verify that the MOSEK installation and CVXPY integration are functioning correctly.
+"""
 import cvxpy as cp
 import numpy as np
 

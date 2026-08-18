@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.linalg import eigvals
-import pandas as pd
+import polars as pl
 
 def check_matrix_dims(A: np.ndarray, B: list[np.ndarray], Q: list[np.ndarray], R: list[np.ndarray]):
     '''Function that check the dimensions of A, matrices in B, matrices in Q, matrices in R.
@@ -84,24 +84,22 @@ def compute_eigenvalues(  A : np.ndarray,
     '''
 
     eigenvalues = eigvals(A)
+    real_parts = np.real(eigenvalues)
+    imag_parts = np.imag(eigenvalues)
 
-    df = pd.DataFrame(data=eigenvalues, columns= ['eigenvalue'])
-    df['real'] = df.apply(lambda row: row['eigenvalue'].real, axis=1)
-    df['imag'] = df.apply(lambda row: row['eigenvalue'].imag, axis=1)
-    df['natural_frequency'] = df.apply(lambda row: abs(row['eigenvalue']/(2*np.pi)), axis=1)
-    df['damping_ratio'] =  df.apply(lambda row: -row['eigenvalue'].real/(abs(row['eigenvalue'])), axis=1)
-    df['time_constant'] = df.apply(lambda row: -1/row['eigenvalue'].real, axis=1)
-    df = df.sort_values(by='real', ascending=False, ignore_index=True)
+    df = pl.DataFrame(data=(real_parts, imag_parts), schema=["real", "imag"])
+    df = df.with_columns( ((pl.col("real")**2 + pl.col("imag")**2).sqrt()).alias("magnitude") )        
+    df = df.with_columns( (pl.col("magnitude")/(2*np.pi)).alias("natural_frequency_hz") )
+    df = df.with_columns( (-pl.col("real")/pl.col("magnitude")).alias("damping_ratio_pu") )
+    df = df.with_columns( (-1/pl.col("real")).alias("time_constant_seconds") )
+    df = df.drop("magnitude")
+    df = df.sort("real", descending=True)     
 
-
-    if show:
-        df_to_print = df.copy()
-        df_to_print = df_to_print[['real', 'imag', 'damping_ratio', 'natural_frequency', 'time_constant']]
-        df_to_print.rename(columns={'real': 'Eigenvalue \n real part',
-                                    'imag': 'Eigenvalue \n imaginary part',
-                                    'damping_ratio': 'Damping \n ratio [p.u.]', 
-                                    'natural_frequency': 'Natural \n frequency [Hz]',
-                                    'time_constant': 'Time \n constant [s]'}, inplace=True)
-        print(df_to_print.to_markdown(**print_settings))
+    df_to_print = df.with_columns(pl.col("real").round(3), 
+                                      pl.col("imag").round(3), 
+                                      pl.col("natural_frequency_hz").round(3), 
+                                      pl.col("damping_ratio_pu").round(3), 
+                                      pl.col("time_constant_seconds").round(4)) 
+    print(df_to_print)
 
     return df

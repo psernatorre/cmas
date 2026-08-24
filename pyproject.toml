@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "cmas"
+version = "0.1.0"
+description = "Control of Multi-agent Systems"
+readme = "README.md"
+requires-python = ">=3.10"
+
+authors = [
+    { name = "Paul", email = "psernatorre@ucsd.edu" }
+]
+
+license = { text = "Apache-2.0" }
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: Apache Software License",
+    "Operating System :: MacOS :: MacOS X",
+    "Topic :: Scientific/Engineering",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+        "polars",
+        "numpy",
+        "scipy",
+	    "cvxpy"
+]
+
+[tool.setuptools.packages.find]
+where = ["."]
